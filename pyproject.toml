@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "embed_papers"
+version = "0.2.0"
+description = "Crawl OpenReview submissions and run embedding-based semantic search."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26.0",
+    "openai>=1.40.0",
+    "requests>=2.31.0",
+    "scikit-learn>=1.4.0",
+]
+
+[project.scripts]
+embed-papers = "embed_papers.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/embed_papers"]
