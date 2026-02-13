@@ -9,13 +9,10 @@ import streamlit as st
 
 from embed_papers import PaperSearcher, crawl_papers
 from embed_papers.cache_paths import (
-    default_cache_root,
+    default_papers_cache_file,
     default_embeddings_cache_dir,
-    default_papers_cache_dir,
 )
 
-CACHE_ROOT = default_cache_root()
-PAPERS_DIR = default_papers_cache_dir()
 EMBEDDINGS_DIR = default_embeddings_cache_dir()
 
 
@@ -24,9 +21,8 @@ def _build_venue_id(conference: str, year: int) -> str:
     return f"{normalized}.cc/{year}/Conference"
 
 
-def _papers_file_path(conference: str, year: int) -> Path:
-    normalized = "_".join(conference.strip().lower().split())
-    return PAPERS_DIR / f"{normalized}_{year}_conference.json"
+def _papers_file_path(venue_id: str) -> Path:
+    return default_papers_cache_file(venue_id)
 
 
 def _load_examples(raw_payload: bytes) -> list[dict[str, Any]]:
@@ -256,9 +252,8 @@ def _run_pipeline(
     query: str | None,
     examples: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
-    PAPERS_DIR.mkdir(parents=True, exist_ok=True)
     EMBEDDINGS_DIR.mkdir(parents=True, exist_ok=True)
-    papers_file = _papers_file_path(conference, year)
+    papers_file = _papers_file_path(venue_id)
 
     with st.status("Running embed-papers pipeline", expanded=True) as status:
         status.write(f"Venue: {venue_id}")
