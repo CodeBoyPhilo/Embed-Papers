@@ -5,6 +5,20 @@
 This is a helper package for my agentic research workflow.
 Originally forked from [gyj155/SearchPaperByEmbedding](https://github.com/gyj155/SearchPaperByEmbedding).
 
+## Install
+
+From GitHub (recommended for SKILL.md usage):
+
+```bash
+pip install "git+https://github.com/CodeBoyPhilo/Embed-Papers.git@v0.3.0"
+```
+
+Editable local install:
+
+```bash
+pip install -e .
+```
+
 ## CLI contract (for agents)
 
 - stdout always prints one JSON object
@@ -18,7 +32,7 @@ Success envelope:
   "ok": true,
   "schema_version": "1",
   "command": "search",
-  "data": {...}
+  "data": {}
 }
 ```
 
@@ -109,5 +123,6 @@ searcher = PaperSearcher(
 
 searcher.ensure_embeddings()
 results = searcher.search(query="robotics planning language model", top_k=100)
+searcher.display(results, n=10, show_abstract=True, abstract_max_chars=500)
 searcher.save(results, "results.json")
 ```

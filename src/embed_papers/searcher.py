@@ -361,7 +361,13 @@ class PaperSearcher:
             for index in top_indices
         ]
 
-    def display(self, results: list[dict[str, Any]], n: int = 10) -> None:
+    def display(
+        self,
+        results: list[dict[str, Any]],
+        n: int = 10,
+        show_abstract: bool = False,
+        abstract_max_chars: int = 500,
+    ) -> None:
         print(f"\n{'=' * 80}")
         print(f"Top {len(results)} Results (showing {min(n, len(results))})")
         print(f"{'=' * 80}\n")
@@ -374,6 +380,11 @@ class PaperSearcher:
             print(
                 f"   #{paper.get('number', 'N/A')} | {paper.get('primary_area', 'N/A')}"
             )
+            if show_abstract:
+                abstract = " ".join(str(paper.get("abstract") or "").split())
+                if abstract_max_chars > 0 and len(abstract) > abstract_max_chars:
+                    abstract = f"{abstract[:abstract_max_chars].rstrip()}..."
+                print(f"   Abstract: {abstract or 'N/A'}")
             print(f"   {paper.get('forum_url', '')}\n")
 
     def save(self, results: list[dict[str, Any]], output_file: str) -> None:
