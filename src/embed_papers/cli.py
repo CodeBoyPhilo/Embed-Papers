@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn, Sequence
 
+from .cache_paths import default_papers_cache_file
 from .crawler import crawl_papers
 from .exceptions import EmbedPapersError
 from .searcher import PaperSearcher
@@ -77,7 +78,7 @@ def _create_parser() -> argparse.ArgumentParser:
 
     crawl_parser = subparsers.add_parser("crawl", help="Fetch papers from OpenReview")
     crawl_parser.add_argument("--venue-id", required=True)
-    crawl_parser.add_argument("--output-file", required=True)
+    crawl_parser.add_argument("--output-file")
     crawl_parser.add_argument("--limit", type=int, default=1000)
     crawl_parser.add_argument("--sleep-seconds", type=float, default=0.5)
     crawl_parser.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -87,7 +88,7 @@ def _create_parser() -> argparse.ArgumentParser:
     warm_parser = subparsers.add_parser(
         "warm-cache", help="Compute cache for a conference/model"
     )
-    warm_parser.add_argument("--papers-file", required=True)
+    warm_parser.add_argument("--papers-file")
     warm_parser.add_argument("--venue-id")
     warm_parser.add_argument("--model-name", default="text-embedding-3-large")
     warm_parser.add_argument("--api-key")
@@ -96,7 +97,7 @@ def _create_parser() -> argparse.ArgumentParser:
     warm_parser.add_argument("--force", action="store_true")
 
     search_parser = subparsers.add_parser("search", help="Run semantic paper search")
-    search_parser.add_argument("--papers-file", required=True)
+    search_parser.add_argument("--papers-file")
     search_parser.add_argument("--venue-id")
     search_parser.add_argument("--model-name", default="text-embedding-3-large")
     search_parser.add_argument("--api-key")
@@ -155,11 +156,20 @@ def _run_host(raw_argv: Sequence[str]) -> int:
     return completed.returncode
 
 
+def _resolve_papers_file(papers_file: str | None, venue_id: str | None) -> str:
+    if papers_file:
+        return papers_file
+    if venue_id:
+        return str(default_papers_cache_file(venue_id))
+    raise ValueError("Provide --papers-file or --venue-id.")
+
+
 def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "crawl":
+        output_file = args.output_file or str(default_papers_cache_file(args.venue_id))
         papers = crawl_papers(
             venue_id=args.venue_id,
-            output_file=args.output_file,
+            output_file=output_file,
             limit=args.limit,
             sleep_seconds=args.sleep_seconds,
             timeout_seconds=args.timeout_seconds,
@@ -169,12 +179,13 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         return {
             "venue_id": args.venue_id,
             "total": len(papers),
-            "output_file": args.output_file,
+            "output_file": output_file,
         }
 
     if args.command == "warm-cache":
+        papers_file = _resolve_papers_file(args.papers_file, args.venue_id)
         searcher = PaperSearcher(
-            papers_file=args.papers_file,
+            papers_file=papers_file,
             venue_id=args.venue_id,
             model_name=args.model_name,
             api_key=args.api_key,
@@ -191,8 +202,9 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         }
 
     if args.command == "search":
+        papers_file = _resolve_papers_file(args.papers_file, args.venue_id)
         searcher = PaperSearcher(
-            papers_file=args.papers_file,
+            papers_file=papers_file,
             venue_id=args.venue_id,
             model_name=args.model_name,
             api_key=args.api_key,

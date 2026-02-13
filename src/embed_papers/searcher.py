@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 
+from .cache_paths import default_embeddings_cache_dir
 from .exceptions import (
     CacheMissRequiresApiKeyError,
     EmbeddingRequestError,
@@ -160,7 +161,7 @@ class PaperSearcher:
         self.base_url = base_url
         self.require_api_key_on_cache_miss = require_api_key_on_cache_miss
 
-        cache_root = Path(cache_dir) if cache_dir else Path(papers_file).parent
+        cache_root = Path(cache_dir) if cache_dir else default_embeddings_cache_dir()
         cache_root.mkdir(parents=True, exist_ok=True)
         cache_name = f"cache_{_slugify(self.venue_id)}_{_slugify(self.model_name)}.npy"
         self.cache_file = str(cache_root / cache_name)

@@ -8,10 +8,15 @@ from typing import Any
 import streamlit as st
 
 from embed_papers import PaperSearcher, crawl_papers
+from embed_papers.cache_paths import (
+    default_cache_root,
+    default_embeddings_cache_dir,
+    default_papers_cache_dir,
+)
 
-CACHE_ROOT = Path.home() / ".cache" / "embed-papers"
-PAPERS_DIR = CACHE_ROOT / "papers"
-EMBEDDINGS_DIR = CACHE_ROOT / "embeddings"
+CACHE_ROOT = default_cache_root()
+PAPERS_DIR = default_papers_cache_dir()
+EMBEDDINGS_DIR = default_embeddings_cache_dir()
 
 
 def _build_venue_id(conference: str, year: int) -> str:
@@ -48,9 +53,7 @@ def _normalize_text(value: str) -> str:
 
 def _show_sidebar_header() -> None:
     st.title("Viewer")
-    st.markdown(
-        "Semantic search for conference papers via OpenReview API."
-    )
+    st.markdown("Semantic search for conference papers via OpenReview API.")
     st.markdown(
         "Built on top of the fork from [gyj155/SearchPaperByEmbedding](https://github.com/gyj155/SearchPaperByEmbedding)"
     )
@@ -351,6 +354,7 @@ def _render_sidebar_form() -> dict[str, Any] | None:
 
 def _render_empty_state() -> None:
     st.markdown("## No results yet")
+
 
 def main() -> None:
     st.set_page_config(page_title="embed-papers viewer", layout="wide")

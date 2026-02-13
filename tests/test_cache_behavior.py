@@ -80,3 +80,21 @@ def test_cache_invalidates_when_papers_change(tmp_path, monkeypatch) -> None:
     )
 
     assert not reloaded.has_cache
+
+
+def test_default_cache_dir_is_user_cache_dir(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    papers_file = tmp_path / "papers.json"
+    _write_papers_file(papers_file)
+    monkeypatch.setattr(PaperSearcher, "_embed_openai", _fake_embed)
+
+    searcher = PaperSearcher(
+        papers_file=str(papers_file),
+        require_api_key_on_cache_miss=False,
+    )
+
+    expected_cache_dir = tmp_path / ".cache" / "embed-papers" / "embeddings"
+    assert Path(searcher.cache_file).parent == expected_cache_dir
+
+    searcher.ensure_embeddings()
+    assert Path(searcher.cache_file).exists()

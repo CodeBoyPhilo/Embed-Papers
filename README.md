@@ -5,27 +5,9 @@
 This is a helper package for my agentic research workflow.
 Originally forked from [gyj155/SearchPaperByEmbedding](https://github.com/gyj155/SearchPaperByEmbedding).
 
-## Install
+# For Agents
 
-From GitHub (recommended for SKILL.md usage):
-
-```bash
-pip install "git+https://github.com/CodeBoyPhilo/Embed-Papers.git@v0.3.0"
-```
-
-Editable local install:
-
-```bash
-pip install -e .
-```
-
-Viewer install (optional):
-
-```bash
-pip install "embed-papers[viewer]"
-```
-
-## CLI contract (for agents)
+## CLI contract
 
 - stdout always prints one JSON object
 - stderr is reserved for logs/progress
@@ -61,28 +43,14 @@ Error envelope:
 ### Crawl
 
 ```bash
-embed-papers crawl \
-  --venue-id "ICLR.cc/2026/Conference" \
-  --output-file iclr2026_papers.json
+embed-papers crawl --venue-id "ICLR.cc/2026/Conference"
 ```
 
 By default, crawl fails when zero papers are found (to catch wrong venue ids early).
-Use `--allow-empty` to explicitly accept empty results.
 
-Optional reliability flags:
+If `--output-file` is omitted, crawl defaults to:
 
-```bash
-embed-papers crawl \
-  --venue-id "ICLR.cc/2026/Conference" \
-  --output-file iclr2026_papers.json \
-  --timeout-seconds 30 \
-  --retry-attempts 5
-
-embed-papers crawl \
-  --venue-id "Some/Venue" \
-  --output-file empty-ok.json \
-  --allow-empty
-```
+- `~/.cache/embed-papers/papers/<venue-id-slug>.json`
 
 ### Warm cache
 
@@ -92,6 +60,13 @@ embed-papers warm-cache \
   --papers-file iclr2026_papers.json \
   --venue-id "ICLR.cc/2026/Conference"
 ```
+
+`--papers-file` is optional if `--venue-id` is provided.
+In that case, it defaults to `~/.cache/embed-papers/papers/<venue-id-slug>.json`.
+
+If `--cache-dir` is omitted, embeddings default to:
+
+- `~/.cache/embed-papers/embeddings`
 
 ### Search
 
@@ -103,7 +78,15 @@ embed-papers search \
   --top-k 20
 ```
 
-### Human viewer
+`--papers-file` is optional if `--venue-id` is provided.
+In that case, it defaults to `~/.cache/embed-papers/papers/<venue-id-slug>.json`.
+
+`search` uses the same default embeddings cache dir (`~/.cache/embed-papers/embeddings`) unless `--cache-dir` is provided.
+
+# For Human
+
+Make sure you have set an `OPENAI_API_KEY` in your shell.
+In the command line, run:
 
 ```bash
 embed-papers host
@@ -112,6 +95,7 @@ embed-papers host
 This launches a local Streamlit UI in your browser for interactive use.
 
 Viewer flow:
+
 - enter conference abbreviation + year (auto-builds venue id)
 - choose direct query or examples upload
 - set top-k and run search
@@ -119,10 +103,9 @@ Viewer flow:
 - auto-build embeddings cache if missing
 
 Cache directories used by viewer:
+
 - `~/.cache/embed-papers/papers`
 - `~/.cache/embed-papers/embeddings`
-
-Set `OPENAI_API_KEY` before running the viewer.
 
 ## Python API
 
