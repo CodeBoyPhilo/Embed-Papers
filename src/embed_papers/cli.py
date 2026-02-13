@@ -84,6 +84,7 @@ def _create_parser() -> argparse.ArgumentParser:
     crawl_parser.add_argument("--timeout-seconds", type=float, default=30.0)
     crawl_parser.add_argument("--retry-attempts", type=int, default=5)
     crawl_parser.add_argument("--allow-empty", action="store_true")
+    crawl_parser.add_argument("--skip-if-exists", action="store_true")
 
     warm_parser = subparsers.add_parser(
         "warm-cache", help="Compute cache for a conference/model"
@@ -164,9 +165,37 @@ def _resolve_papers_file(papers_file: str | None, venue_id: str | None) -> str:
     raise ValueError("Provide --papers-file or --venue-id.")
 
 
+def _load_existing_papers_total(output_file: str) -> int:
+    output_path = Path(output_file)
+    try:
+        loaded = json.loads(output_path.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+
+    if not isinstance(loaded, dict):
+        return 0
+
+    papers = loaded.get("papers")
+    if isinstance(papers, list):
+        return len(papers)
+
+    total = loaded.get("total")
+    if isinstance(total, int):
+        return total
+
+    return 0
+
+
 def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "crawl":
         output_file = args.output_file or str(default_papers_cache_file(args.venue_id))
+        output_path = Path(output_file)
+        if args.skip_if_exists and output_path.exists():
+            return {
+                "venue_id": args.venue_id,
+                "total": _load_existing_papers_total(output_file),
+                "output_file": output_file,
+            }
         papers = crawl_papers(
             venue_id=args.venue_id,
             output_file=output_file,

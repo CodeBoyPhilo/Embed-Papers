@@ -161,6 +161,47 @@ def test_crawl_defaults_output_file_to_cache_dir(monkeypatch, capsys, tmp_path) 
     assert seen["output_file"] == str(expected_output)
 
 
+def test_crawl_skip_if_exists_uses_cached_file(tmp_path, monkeypatch, capsys) -> None:
+    output_file = tmp_path / "papers.json"
+    output_file.write_text(
+        json.dumps(
+            {
+                "venue_id": "ICLR.cc/2026/Conference",
+                "total": 2,
+                "papers": [{"id": "p1"}, {"id": "p2"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def _crawl_papers(**_: object) -> list[dict[str, str]]:
+        raise AssertionError(
+            "crawl_papers should not run when --skip-if-exists is used"
+        )
+
+    monkeypatch.setattr(cli, "crawl_papers", _crawl_papers)
+
+    exit_code = cli.main(
+        [
+            "crawl",
+            "--venue-id",
+            "ICLR.cc/2026/Conference",
+            "--output-file",
+            str(output_file),
+            "--skip-if-exists",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["data"]["venue_id"] == "ICLR.cc/2026/Conference"
+    assert payload["data"]["output_file"] == str(output_file)
+    assert payload["data"]["total"] == 2
+
+
 def test_warm_cache_defaults_papers_file_from_venue(
     monkeypatch, capsys, tmp_path
 ) -> None:

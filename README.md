@@ -43,10 +43,12 @@ Error envelope:
 ### Crawl
 
 ```bash
-embed-papers crawl --venue-id "ICLR.cc/2026/Conference"
+embed-papers crawl --venue-id "ICLR.cc/2026/Conference" --skip-if-exists
 ```
 
 By default, crawl fails when zero papers are found (to catch wrong venue ids early).
+
+Use `--skip-if-exists` to reuse an existing output file and skip calling OpenReview.
 
 If `--output-file` is omitted, crawl defaults to:
 
