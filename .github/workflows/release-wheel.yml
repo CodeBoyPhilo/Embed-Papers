@@ -1,12 +1,11 @@
-name: Release wheel
+name: Release wheel and publish to PyPI
 on:
   push:
     tags:
       - "v*"
-permissions:
-  contents: write
+
 jobs:
-  release-wheel:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,10 +20,44 @@ jobs:
         run: python -m pip install -e .
       - name: Run tests
         run: pytest
-      - name: Build wheel
-        run: python -m build --wheel --outdir dist
+      - name: Build wheel and sdist
+        run: python -m build --outdir dist
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  release-wheel:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
       - name: Attach wheel to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.whl
           generate_release_notes: true
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/embed-papers
+    permissions:
+      id-token: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
