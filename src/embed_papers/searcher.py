@@ -1,21 +1,101 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
-from .exceptions import CacheMissRequiresApiKeyError, InvalidPapersFileError
+from .exceptions import (
+    CacheMissRequiresApiKeyError,
+    EmbeddingRequestError,
+    InvalidPapersFileError,
+)
 from .models import Paper
+from .retry import call_with_retry
 
 
 def _slugify(value: str) -> str:
     lowered = value.strip().lower()
     return re.sub(r"[^a-z0-9]+", "-", lowered).strip("-") or "unknown"
+
+
+def _log(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def _papers_fingerprint(papers: list[Paper]) -> str:
+    hasher = hashlib.sha256()
+    for paper in papers:
+        payload = {
+            "id": paper.id,
+            "number": paper.number,
+            "title": paper.title,
+            "authors": paper.authors,
+            "abstract": paper.abstract,
+            "keywords": paper.keywords,
+            "primary_area": paper.primary_area,
+            "forum_url": paper.forum_url,
+        }
+        hasher.update(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        )
+    return hasher.hexdigest()
+
+
+def _cosine_similarity_scores(
+    query_embedding: np.ndarray, embeddings: np.ndarray
+) -> np.ndarray:
+    if embeddings.size == 0:
+        return np.array([])
+
+    query = np.asarray(query_embedding, dtype=float).reshape(-1)
+    matrix = np.asarray(embeddings, dtype=float)
+
+    query_norm = np.linalg.norm(query)
+    matrix_norm = np.linalg.norm(matrix, axis=1)
+
+    if query_norm == 0.0:
+        return np.zeros(len(matrix), dtype=float)
+
+    safe_denom = matrix_norm * query_norm
+    safe_denom[safe_denom == 0.0] = 1e-12
+
+    return (matrix @ query) / safe_denom
+
+
+def _is_retryable_embedding_error(exc: Exception) -> bool:
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+
+    if type(exc).__name__ in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "RateLimitError",
+        "InternalServerError",
+    }:
+        return True
+
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int) and status_code in {429, 500, 502, 503, 504}:
+        return True
+
+    response = getattr(exc, "response", None)
+    response_status = getattr(response, "status_code", None)
+    if isinstance(response_status, int) and response_status in {
+        429,
+        500,
+        502,
+        503,
+        504,
+    }:
+        return True
+
+    return False
 
 
 def _load_papers_file(
@@ -59,6 +139,8 @@ def _load_papers_file(
 
 
 class PaperSearcher:
+    CACHE_SCHEMA_VERSION = 1
+
     def __init__(
         self,
         papers_file: str,
@@ -82,6 +164,8 @@ class PaperSearcher:
         cache_root.mkdir(parents=True, exist_ok=True)
         cache_name = f"cache_{_slugify(self.venue_id)}_{_slugify(self.model_name)}.npy"
         self.cache_file = str(cache_root / cache_name)
+        self.cache_metadata_file = f"{self.cache_file}.meta.json"
+        self.papers_fingerprint = _papers_fingerprint(self.papers)
 
         self.embeddings: np.ndarray | None = None
         self._client: Any | None = None
@@ -102,22 +186,78 @@ class PaperSearcher:
         try:
             loaded = np.load(self.cache_file)
         except Exception:
+            _log(f"Invalid cache file, rebuilding: {self.cache_file}")
             self.embeddings = None
             return False
 
         if len(loaded) != len(self.papers):
+            _log("Cache row count mismatch, rebuilding cache")
+            self.embeddings = None
+            return False
+
+        metadata = self._load_cache_metadata()
+        if metadata is None:
+            _log("Missing or invalid cache metadata, rebuilding cache")
+            self.embeddings = None
+            return False
+
+        if not self._is_cache_metadata_valid(metadata, loaded):
+            _log("Cache metadata mismatch, rebuilding cache")
             self.embeddings = None
             return False
 
         self.embeddings = loaded
-        print(f"Loaded cache: {getattr(loaded, 'shape', None)}")
+        _log(f"Loaded cache: {getattr(loaded, 'shape', None)}")
+        return True
+
+    def _load_cache_metadata(self) -> dict[str, Any] | None:
+        metadata_path = Path(self.cache_metadata_file)
+        if not metadata_path.exists():
+            return None
+
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+        if not isinstance(metadata, dict):
+            return None
+        return metadata
+
+    def _is_cache_metadata_valid(
+        self,
+        metadata: dict[str, Any],
+        embeddings: np.ndarray,
+    ) -> bool:
+        expected = {
+            "schema_version": self.CACHE_SCHEMA_VERSION,
+            "venue_id": self.venue_id,
+            "model_name": self.model_name,
+            "papers_count": len(self.papers),
+            "papers_fingerprint": self.papers_fingerprint,
+            "embedding_shape": list(embeddings.shape),
+        }
+        for key, value in expected.items():
+            if metadata.get(key) != value:
+                return False
         return True
 
     def _save_cache(self) -> None:
         if self.embeddings is None:
             return
         np.save(self.cache_file, self.embeddings)
-        print(f"Saved cache: {self.cache_file}")
+        metadata = {
+            "schema_version": self.CACHE_SCHEMA_VERSION,
+            "venue_id": self.venue_id,
+            "model_name": self.model_name,
+            "papers_count": len(self.papers),
+            "papers_fingerprint": self.papers_fingerprint,
+            "embedding_shape": list(self.embeddings.shape),
+        }
+        Path(self.cache_metadata_file).write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        _log(f"Saved cache: {self.cache_file}")
 
     def _get_client(self) -> Any:
         if self._client is not None:
@@ -145,14 +285,25 @@ class PaperSearcher:
 
         for start in range(0, len(text_items), batch_size):
             batch = text_items[start : start + batch_size]
-            response = client.embeddings.create(input=batch, model=self.model_name)
+            try:
+                response = call_with_retry(
+                    lambda: client.embeddings.create(
+                        input=batch, model=self.model_name
+                    ),
+                    is_retryable=_is_retryable_embedding_error,
+                    max_attempts=5,
+                )
+            except Exception as exc:
+                raise EmbeddingRequestError(
+                    f"Embedding request failed for model={self.model_name}, batch_start={start}."
+                ) from exc
             embeddings.extend(item.embedding for item in response.data)
 
         return np.array(embeddings)
 
     def compute_embeddings(self, force: bool = False) -> np.ndarray:
         if self.embeddings is not None and not force:
-            print("Using cached embeddings")
+            _log("Using cached embeddings")
             return self.embeddings
 
         if self.require_api_key_on_cache_miss and not self.resolved_api_key:
@@ -160,11 +311,11 @@ class PaperSearcher:
                 "No cache for this venue/model and no API key found. Set OPENAI_API_KEY to build cache."
             )
 
-        print(f"Computing embeddings ({self.model_name})...")
+        _log(f"Computing embeddings ({self.model_name})...")
         texts = [paper.to_embedding_text() for paper in self.papers]
         computed = self._embed_openai(texts)
         self.embeddings = computed
-        print(f"Computed: {computed.shape}")
+        _log(f"Computed: {computed.shape}")
         self._save_cache()
         return self.embeddings
 
@@ -179,6 +330,10 @@ class PaperSearcher:
     ) -> list[dict[str, Any]]:
         if self.embeddings is None:
             self.compute_embeddings()
+
+        embeddings = self.embeddings
+        if embeddings is None:
+            raise RuntimeError("Embeddings were not computed.")
 
         if examples:
             texts: list[str] = []
@@ -195,7 +350,7 @@ class PaperSearcher:
         else:
             raise ValueError("Provide either examples or query")
 
-        similarities = cosine_similarity(query_embedding, self.embeddings)[0]
+        similarities = _cosine_similarity_scores(query_embedding, embeddings)
         top_indices = np.argsort(similarities)[::-1][:top_k]
 
         return [
@@ -231,4 +386,4 @@ class PaperSearcher:
         Path(output_file).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        print(f"Saved to {output_file}")
+        _log(f"Saved to {output_file}")

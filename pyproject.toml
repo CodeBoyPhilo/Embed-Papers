@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "embed_papers"
-version = "0.2.0"
+version = "0.3.0"
 description = "Crawl OpenReview submissions and run embedding-based semantic search."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,11 @@ dependencies = [
     "numpy>=1.26.0",
     "openai>=1.40.0",
     "requests>=2.31.0",
-    "scikit-learn>=1.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
 ]
 
 [project.scripts]

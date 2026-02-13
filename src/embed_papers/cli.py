@@ -4,11 +4,19 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, NoReturn, Sequence
 
 from .crawler import crawl_papers
 from .exceptions import EmbedPapersError
 from .searcher import PaperSearcher
+
+SCHEMA_VERSION = "1"
+KNOWN_COMMANDS = {"crawl", "warm-cache", "search"}
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        raise ValueError(message)
 
 
 def _read_examples(examples_file: str) -> list[dict[str, Any]]:
@@ -24,8 +32,45 @@ def _read_examples(examples_file: str) -> list[dict[str, Any]]:
     return examples
 
 
+def _guess_command(argv: Sequence[str] | None) -> str | None:
+    if not argv:
+        return None
+    for token in argv:
+        if token.startswith("-"):
+            continue
+        if token in KNOWN_COMMANDS:
+            return token
+        return token
+    return None
+
+
+def _success_payload(command: str, data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "schema_version": SCHEMA_VERSION,
+        "command": command,
+        "data": data,
+    }
+
+
+def _error_payload(
+    command: str | None,
+    error_type: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "schema_version": SCHEMA_VERSION,
+        "command": command,
+        "error": {
+            "type": error_type,
+            "message": message,
+        },
+    }
+
+
 def _create_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="embed-papers")
+    parser = JsonArgumentParser(prog="embed-papers")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     crawl_parser = subparsers.add_parser("crawl", help="Fetch papers from OpenReview")
@@ -33,6 +78,9 @@ def _create_parser() -> argparse.ArgumentParser:
     crawl_parser.add_argument("--output-file", required=True)
     crawl_parser.add_argument("--limit", type=int, default=1000)
     crawl_parser.add_argument("--sleep-seconds", type=float, default=0.5)
+    crawl_parser.add_argument("--timeout-seconds", type=float, default=30.0)
+    crawl_parser.add_argument("--retry-attempts", type=int, default=5)
+    crawl_parser.add_argument("--allow-empty", action="store_true")
 
     warm_parser = subparsers.add_parser(
         "warm-cache", help="Compute cache for a conference/model"
@@ -68,10 +116,11 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             output_file=args.output_file,
             limit=args.limit,
             sleep_seconds=args.sleep_seconds,
+            timeout_seconds=args.timeout_seconds,
+            retry_attempts=args.retry_attempts,
+            allow_empty=args.allow_empty,
         )
         return {
-            "ok": True,
-            "command": "crawl",
             "venue_id": args.venue_id,
             "total": len(papers),
             "output_file": args.output_file,
@@ -88,11 +137,10 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         )
         shape = searcher.ensure_embeddings(force=args.force).shape
         return {
-            "ok": True,
-            "command": "warm-cache",
             "venue_id": searcher.venue_id,
             "model": searcher.model_name,
             "cache_file": searcher.cache_file,
+            "cache_metadata_file": searcher.cache_metadata_file,
             "embedding_shape": list(shape),
         }
 
@@ -110,12 +158,11 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         if args.output_file:
             searcher.save(results, args.output_file)
         return {
-            "ok": True,
-            "command": "search",
             "venue_id": searcher.venue_id,
             "model": searcher.model_name,
             "total": len(results),
             "results": results,
+            "output_file": args.output_file,
         }
 
     raise ValueError(f"Unknown command: {args.command}")
@@ -123,28 +170,44 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _create_parser()
-    args = parser.parse_args(argv)
+    raw_argv: Sequence[str] = argv if argv is not None else sys.argv[1:]
+    command = _guess_command(raw_argv)
+
     try:
-        payload = _run(args)
+        args = parser.parse_args(argv)
+    except ValueError as exc:
+        print(
+            json.dumps(
+                _error_payload(command, "ArgumentError", str(exc)),
+                ensure_ascii=False,
+            )
+        )
+        return 2
+
+    command = args.command
+
+    try:
+        payload = _success_payload(command, _run(args))
+        exit_code = 0
     except EmbedPapersError as exc:
         print(
             json.dumps(
-                {"ok": False, "error_type": type(exc).__name__, "error": str(exc)}
-            ),
-            file=sys.stderr,
+                _error_payload(command, type(exc).__name__, str(exc)),
+                ensure_ascii=False,
+            )
         )
         return 1
     except Exception as exc:  # pragma: no cover
         print(
             json.dumps(
-                {"ok": False, "error_type": type(exc).__name__, "error": str(exc)}
-            ),
-            file=sys.stderr,
+                _error_payload(command, type(exc).__name__, str(exc)),
+                ensure_ascii=False,
+            )
         )
         return 1
 
     print(json.dumps(payload, ensure_ascii=False))
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
