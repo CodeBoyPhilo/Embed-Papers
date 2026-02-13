@@ -19,6 +19,12 @@ Editable local install:
 pip install -e .
 ```
 
+Viewer install (optional):
+
+```bash
+pip install "embed-papers[viewer]"
+```
+
 ## CLI contract (for agents)
 
 - stdout always prints one JSON object
@@ -96,6 +102,27 @@ embed-papers search \
   --query "foundation models for planning" \
   --top-k 20
 ```
+
+### Human viewer
+
+```bash
+embed-papers host
+```
+
+This launches a local Streamlit UI in your browser for interactive use.
+
+Viewer flow:
+- enter conference abbreviation + year (auto-builds venue id)
+- choose direct query or examples upload
+- set top-k and run search
+- auto-crawl papers if missing
+- auto-build embeddings cache if missing
+
+Cache directories used by viewer:
+- `~/.cache/embed-papers/papers`
+- `~/.cache/embed-papers/embeddings`
+
+Set `OPENAI_API_KEY` before running the viewer.
 
 ## Python API
 

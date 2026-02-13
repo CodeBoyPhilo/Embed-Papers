@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, NoReturn, Sequence
@@ -109,6 +111,50 @@ def _create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _create_host_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="embed-papers host")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8501)
+    return parser
+
+
+def _run_host(raw_argv: Sequence[str]) -> int:
+    if importlib.util.find_spec("streamlit") is None:
+        print(
+            'Streamlit is not installed. Install viewer extras with: pip install "embed-papers[viewer]"',
+            file=sys.stderr,
+        )
+        return 1
+
+    command_index = list(raw_argv).index("host")
+    host_argv = raw_argv[command_index + 1 :]
+
+    host_parser = _create_host_parser()
+    try:
+        host_args = host_parser.parse_args(host_argv)
+    except SystemExit as exc:
+        code = exc.code
+        return code if isinstance(code, int) else 2
+
+    app_path = Path(__file__).resolve().parent / "viewer" / "app.py"
+    command = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app_path),
+        "--server.address",
+        host_args.host,
+        "--server.port",
+        str(host_args.port),
+        "--server.headless",
+        "false",
+    ]
+
+    completed = subprocess.run(command)
+    return completed.returncode
+
+
 def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "crawl":
         papers = crawl_papers(
@@ -169,8 +215,11 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = _create_parser()
     raw_argv: Sequence[str] = argv if argv is not None else sys.argv[1:]
+    if _guess_command(raw_argv) == "host":
+        return _run_host(raw_argv)
+
+    parser = _create_parser()
     command = _guess_command(raw_argv)
 
     try:
