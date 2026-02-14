@@ -267,7 +267,7 @@ class PaperSearcher:
         key = self.resolved_api_key
         if not key:
             raise CacheMissRequiresApiKeyError(
-                "Embeddings cache not found. Set OPENAI_API_KEY (or pass api_key) to create conference cache."
+                "OpenAI API key required to compute embeddings. Set OPENAI_API_KEY (or pass api_key)."
             )
 
         from openai import OpenAI
@@ -309,7 +309,7 @@ class PaperSearcher:
 
         if self.require_api_key_on_cache_miss and not self.resolved_api_key:
             raise CacheMissRequiresApiKeyError(
-                "No cache for this venue/model and no API key found. Set OPENAI_API_KEY to build cache."
+                "No cached embeddings for this venue/model and no API key found. Set OPENAI_API_KEY to build cache."
             )
 
         _log(f"Computing embeddings ({self.model_name})...")
