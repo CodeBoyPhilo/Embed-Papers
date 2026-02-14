@@ -16,6 +16,10 @@ def default_embeddings_cache_dir() -> Path:
     return default_cache_root() / "embeddings"
 
 
+def default_atlas_cache_dir() -> Path:
+    return default_cache_root() / "atlas"
+
+
 def _slugify(value: str) -> str:
     lowered = value.strip().lower()
     return re.sub(r"[^a-z0-9]+", "-", lowered).strip("-") or "unknown"
