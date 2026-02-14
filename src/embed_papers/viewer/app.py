@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -335,6 +336,12 @@ def _render_sidebar_form() -> dict[str, Any] | None:
 
         if mode == "Examples upload" and not examples:
             st.error("Upload a valid examples JSON file before running search.")
+            return None
+
+        if not os.getenv("OPENAI_API_KEY"):
+            st.error(
+                "OPENAI_API_KEY is required to embed queries/examples. Set it in your shell and restart the app."
+            )
             return None
 
     return {
