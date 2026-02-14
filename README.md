@@ -5,6 +5,31 @@
 This is a helper package for my agentic research workflow.
 Originally forked from [gyj155/SearchPaperByEmbedding](https://github.com/gyj155/SearchPaperByEmbedding).
 
+`embed-papers` supports two workflows:
+
+- For [agents](#for-agents): a stable CLI contract (JSON stdout) that is safe to automate and parse.
+- For [humans](#for-humans): a Streamlit viewer for interactive search, exploration, and positioning your work within a conference’s paper space.
+
+## Installation
+
+### Base package
+
+```bash
+pip install embed_papers
+```
+
+Set your API key for embeddings:
+
+```bash
+export OPENAI_API_KEY="<your-key>"
+```
+
+### Viewer (extra dependency)
+
+```bash
+pip install "embed_papers[viewer]"
+```
+
 # For Agents
 
 ## CLI contract
@@ -85,7 +110,7 @@ In that case, it defaults to `~/.cache/embed-papers/papers/<venue-id-slug>.json`
 
 `search` uses the same default embeddings cache dir (`~/.cache/embed-papers/embeddings`) unless `--cache-dir` is provided.
 
-# For Human
+# For Humans
 
 Make sure you have set an `OPENAI_API_KEY` in your shell.
 In the command line, run:
@@ -108,6 +133,7 @@ Cache directories used by viewer:
 
 - `~/.cache/embed-papers/papers`
 - `~/.cache/embed-papers/embeddings`
+- `~/.cache/embed-papers/atlas`
 
 ## Python API
 
